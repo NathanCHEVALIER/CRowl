@@ -73,7 +73,9 @@ const findCertSpotter = async (url) => {
 const find = async (url) => {
     let domains = {};
     let count = 0;
-    /*const crt = await findCrt(url);
+    
+    /*
+    const crt = await findCrt(url);
 
     Object.keys(crt).forEach((key) => {
         if (domains[key] === undefined) {
@@ -83,7 +85,8 @@ const find = async (url) => {
     });
 
     console.log("============== [ CRT.sh ]: " + count);
-*/
+    */
+
     const alienVault = await findAlienVault(url);
 
     count = 0;
