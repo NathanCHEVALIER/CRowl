@@ -14,18 +14,26 @@ const cleanUrl = (url) => {
 
 const findCrt = async (url) => {
     let domains = {};
-
-    const {body, response} = await request
-        .getRequest('https://crt.sh/?q=%.' + url + '&output=json')
-        .catch((err) => {});
     
-    JSON.parse(body).forEach((elt) => {
-        elt.name_value.split('\n').forEach( (url) => {
-            domains[cleanUrl(url)] = {
-                issuer: elt.issuer_name
+    const response = await request
+        .getRequest('https://crt.sh/?q=%.' + url + '&output=json')
+        .catch((err) => {
+            //console.log(err);
+            // TODO: logger
+            return false;
+        });
+
+    if (response && response.response.status_code == 200) {
+        let subdomains = JSON.parse(response.body)["passive_dns"].map((elt) => {
+            return cleanUrl(elt.hostname);
+        });
+    
+        subdomains.forEach( (elt) => {
+            domains[elt] = {
+                issuer: ''
             };
-        })
-    });
+        });
+    }
 
     return domains;
 }
@@ -73,7 +81,8 @@ const findCertSpotter = async (url) => {
 const find = async (url) => {
     let domains = {};
     let count = 0;
-    /*const crt = await findCrt(url);
+    
+    const crt = await findCrt(url);
 
     Object.keys(crt).forEach((key) => {
         if (domains[key] === undefined) {
@@ -83,7 +92,7 @@ const find = async (url) => {
     });
 
     console.log("============== [ CRT.sh ]: " + count);
-*/
+/*
     const alienVault = await findAlienVault(url);
 
     count = 0;
@@ -107,6 +116,7 @@ const find = async (url) => {
     });
 
     console.log("============== [ CertSpotter ]: " + count);
+    */
 
     return Object.keys(domains);
 }
