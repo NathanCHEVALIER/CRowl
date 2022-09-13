@@ -14,18 +14,26 @@ const cleanUrl = (url) => {
 
 const findCrt = async (url) => {
     let domains = {};
-
-    const {body, response} = await request
-        .getRequest('https://crt.sh/?q=%.' + url + '&output=json')
-        .catch((err) => {});
     
-    JSON.parse(body).forEach((elt) => {
-        elt.name_value.split('\n').forEach( (url) => {
-            domains[cleanUrl(url)] = {
-                issuer: elt.issuer_name
+    const response = await request
+        .getRequest('https://crt.sh/?q=%.' + url + '&output=json')
+        .catch((err) => {
+            //console.log(err);
+            // TODO: logger
+            return false;
+        });
+
+    if (response && response.response.status_code == 200) {
+        let subdomains = JSON.parse(response.body)["passive_dns"].map((elt) => {
+            return cleanUrl(elt.hostname);
+        });
+    
+        subdomains.forEach( (elt) => {
+            domains[elt] = {
+                issuer: ''
             };
-        })
-    });
+        });
+    }
 
     return domains;
 }
