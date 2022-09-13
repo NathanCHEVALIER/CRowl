@@ -1,6 +1,6 @@
 const request = require('./../request');
 
-const crawl = async (url) => {
+const find = async (url) => {
     let path = 'https://crt.sh/?q=%.' + url + '&output=json';
 
     const {body, response} = await request.getRequest(path);
@@ -19,5 +19,5 @@ const crawl = async (url) => {
 }
 
 module.exports = {
-    crawl
+    find
 }
