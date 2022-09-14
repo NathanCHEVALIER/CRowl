@@ -31,14 +31,14 @@ program
             splitedFilename[0] += "_domain";
 
             let fileDomain = fs.createWriteStream(splitedFilename.join('.'));
-            file.on('error', function(err) { /* error handling */ });
-            subdomains.forEach((url) => { file.write(url + '\n'); });
-            file.end();
+            fileDomain.on('error', function(err) { /* error handling */ });
+            subdomains.forEach((url) => { fileDomain.write(url + '\n'); });
+            fileDomain.end();
 
             let filePages = fs.createWriteStream(filename);
-            file.on('error', function(err) { /* error handling */ });
-            pages.forEach((url) => { file.write(url + '\n'); });
-            file.end();
+            filePages.on('error', function(err) { /* error handling */ });
+            pages.forEach((url) => { filePages.write(url + '\n'); });
+            filePages.end();
         }
     });
 
