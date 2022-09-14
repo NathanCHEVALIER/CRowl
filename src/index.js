@@ -22,9 +22,8 @@ program
     })
     .option('-d, --domain <domain>', 'domain name')
     .action(async (options) => {
-        const spinner = interface.waitLog('Looking for subdomains');
         subdomains = await domEnum.find(options.domain);
-        spinner.succeed(subdomains.length + ' Subdomains found');
+        
         if (filename !== undefined && filename !== "") {
             let file = fs.createWriteStream(filename);
             file.on('error', function(err) { /* error handling */ });

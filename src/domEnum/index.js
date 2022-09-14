@@ -18,14 +18,14 @@ const errorResponseCode = (n) => { interface.writeLog('Error: Unexpected HTTP Re
 
 const errorHandler = (err) => {
     if (err.code === 'ESOCKETTIMEDOUT')
-        interface.writeLog('Timed OUT', { color: 'red' });
+        interface.writeLog('Timed OUT\r\n', { color: 'red' });
     else
-        console.log(err);
-    // TODO: logger
+        interface.writeLog(err, { color: 'red' });
     return false;
 }
 
 const errorChecker = (body) => {
+    //console.log(body);
     try {
         const response = JSON.parse(body);
         
@@ -36,93 +36,61 @@ const errorChecker = (body) => {
 
         return response;
     }
-    catch (e) {}
+    catch (e) {
+        //console.log(e);
+    }
 
     interface.writeLog('Error: Bad JSON Response format', { color: 'red' });
     return false;
 }
 
-const findCrt = async (url) => {
-    let domains = {};
+const findCrt = async (subdomains) => {
+    let domains = [];
     
-    const response = await request
-        .getRequest('https://crt.sh/?q=%.' + url + '&output=json', 50000)
-        .catch((err) => { return errorHandler(err) });
-
-    if (response && response.response.statusCode >= 400)
-        console.log(response.response.statusCode);
-
-    if (response && response.response.statusCode == 200) {
-        let subdomains = JSON.parse(response.body).forEach((elt) => {
-            elt.name_value.split('\n').forEach( (url) => {
-                domains[cleanUrl(url)] = {
-                    issuer: elt.issuer_name
-                }
+    subdomains = subdomains.forEach((elt) => {
+        elt.name_value.split('\n').forEach( (url) => {
+            domains.push({
+                name: cleanUrl(url),
+                issuer: elt.issuer_name,
             });
         });
-    }
-
-    return domains;
-}
-
-const findAlienVault = async (url) => {
-    let domains = {};
-    
-    const response = await request
-        .getRequest('https://otx.alienvault.com/api/v1/indicators/domain/' + url + '/passive_dns')
-        .catch((err) => { return errorHandler(err) });
-
-    if (response && response.response.statusCode >= 400)
-        console.log(response.response.statusCode);
-
-    if (response && response.response.statusCode == 200) {
-        let subdomains = errorChecker(response.body)
-        if (!subdomains)
-            return domains;
-
-        subdomains = subdomains["passive_dns"].map((elt) => {
-            return cleanUrl(elt.hostname);
-        });
-
-        subdomains.forEach( (elt) => {
-            domains[elt] = {
-                issuer: ''
-            };
-        });
-    }
-
-    return domains;
-}
-
-const findCertSpotter = async (url) => {
-    let domains = {};
-
-    const {body, response} = await request
-        .getRequest('https://api.certspotter.com/v1/issuances?domain=' + url + '&include_subdomains=true&expand=dns_names&expand=issuer&expand=cert')
-        .catch((err) => {});
-
-    let subdomains = errorChecker(body)
-
-    if (!subdomains)
-        return domains;
-
-    subdomains = subdomains.map((elt) => {
-        return cleanUrl(elt.dns_names[0]);
     });
 
-    subdomains.forEach( (elt) => {
-        domains[elt] = {
-            issuer: ''
+    return domains;
+}
+
+const findAlienVault = async (subdomains) => {
+    return subdomains["passive_dns"].map((elt) => {
+        return {
+            name: cleanUrl(elt.hostname),
+            issuer: '',
         };
     });
+}
 
-    return domains;
+const findCertSpotter = async (subdomains) => {
+    return subdomains.map((elt) => {
+        return {
+            name: cleanUrl(elt.dns_names[0]),
+            issuer: '',
+        };
+    });
 }
 
 const requestApi = async (api) => {    
     const response = await request
         .getRequest(api.path)
-        .catch((err) => { return errorHandler(err) });
+        .catch((err) => { 
+            const e = errorHandler(err);
+            console.log(e);
+            return e;
+        });
+
+    if (api.name === 'crt.sh')
+        console.log(response);
+        
+    if (response === false)
+        console.log('timeout');
 
     if (response && response.response.statusCode >= 400)
         errorResponseCode(response.response.statusCode);
@@ -130,10 +98,10 @@ const requestApi = async (api) => {
     if (response && response.response.statusCode == 200) {
         let subdomains = errorChecker(response.body)
         if (subdomains)
-            return api.fn.apply(null, [subdomains]);
+            return await api.fn.apply(null, [subdomains]);
     }
 
-    return {};
+    return [];
 }
 
 const find = async (url) => {    
@@ -144,8 +112,14 @@ const find = async (url) => {
             path: 'https://crt.sh/?q=%.' + url + '&output=json',
             fn: findCrt
         },
-        'AlienVault': { fn: findAlienVault },
-        'CertSpotter': { fn: findCertSpotter }
+        'AlienVault': { 
+            path: 'https://otx.alienvault.com/api/v1/indicators/domain/' + url + '/passive_dns',
+            fn: findAlienVault 
+        },
+        'CertSpotter': { 
+            path: 'https://api.certspotter.com/v1/issuances?domain=' + url + '&include_subdomains=true&expand=dns_names&expand=issuer&expand=cert',
+            fn: findCertSpotter 
+        }
     }
 
     const l = Object.keys(apis).map((elt) => { return apis[elt].fn });
@@ -158,17 +132,20 @@ const find = async (url) => {
 
         const spinner = interface.waitLog('Looking for subdomains in ' + apiName);
 
-        let count = 0;
-        const response = await api.apply(null, [url]);
+        const response = await requestApi(apis[apiName]);
 
-        Object.keys(response).forEach((key) => {
-            if (domains[key] === undefined)
-                domains[key] = response[key];
-            count++;
+        let count = 0;
+        response.forEach((elt) => {
+            if (domains[elt.name] === undefined)
+                domains[elt.name] = elt; count++;
         });
 
-        spinner.succeed(count + ' Subdomains found in ' + apiName);
-        //interface.writeLog('============== [  ]: ' + count, { color: 'green' });
+        //console.log(response);
+
+        if (response.length >= 0)
+            spinner.succeed(response.length + ' Subdomains found in ' + apiName + ' dont ' + count + ' new unique');
+        else
+            spinner.fail(apiName + ' failed');
     };
 
     return Object.keys(domains);
