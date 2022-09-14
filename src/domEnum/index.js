@@ -1,4 +1,5 @@
 const request = require('./../request');
+const interface = require('./../interface');
 
 const cleanUrl = (url) => {
     if (url === undefined)
@@ -12,26 +13,51 @@ const cleanUrl = (url) => {
         .split('/')[0];
 }
 
+const errorRateLimited = () => { interface.writeLog('You have been rate limited', { color: 'red' }); return false; };
+
+const errorHandler = (err) => {
+    if (err.code === 'ESOCKETTIMEDOUT')
+        interface.writeLog('Timed OUT', { color: 'red' });
+    else
+        console.log(err);
+    // TODO: logger
+    return false;
+}
+
+const errorChecker = (body) => {
+    try {
+        const response = JSON.parse(body);
+        
+        if (response.code !== undefined) {
+            if (response.code = 'rate_limited')
+                return errorRateLimited();
+        }
+
+        return response;
+    }
+    catch (e) {}
+
+    interface.writeLog('Error: Bad JSON Response format', { color: 'red' });
+    return false;
+}
+
 const findCrt = async (url) => {
     let domains = {};
     
     const response = await request
-        .getRequest('https://crt.sh/?q=%.' + url + '&output=json')
-        .catch((err) => {
-            //console.log(err);
-            // TODO: logger
-            return false;
-        });
+        .getRequest('https://crt.sh/?q=%.' + url + '&output=json', 50000)
+        .catch((err) => { return errorHandler(err) });
 
-    if (response && response.response.status_code == 200) {
-        let subdomains = JSON.parse(response.body)["passive_dns"].map((elt) => {
-            return cleanUrl(elt.hostname);
-        });
-    
-        subdomains.forEach( (elt) => {
-            domains[elt] = {
-                issuer: ''
-            };
+    if (response && response.response.statusCode >= 400)
+        console.log(response.response.statusCode);
+
+    if (response && response.response.statusCode == 200) {
+        let subdomains = JSON.parse(response.body).forEach((elt) => {
+            elt.name_value.split('\n').forEach( (url) => {
+                domains[cleanUrl(url)] = {
+                    issuer: elt.issuer_name
+                }
+            });
         });
     }
 
@@ -65,7 +91,12 @@ const findCertSpotter = async (url) => {
         .getRequest('https://api.certspotter.com/v1/issuances?domain=' + url + '&include_subdomains=true&expand=dns_names&expand=issuer&expand=cert')
         .catch((err) => {});
 
-    let subdomains = JSON.parse(body).map((elt) => {
+    let subdomains = errorChecker(body)
+
+    if (!subdomains)
+        return domains;
+
+    subdomains = subdomains.map((elt) => {
         return cleanUrl(elt.dns_names[0]);
     });
 
@@ -80,43 +111,35 @@ const findCertSpotter = async (url) => {
 
 const find = async (url) => {
     let domains = {};
-    let count = 0;
-    
-    const crt = await findCrt(url);
 
-    Object.keys(crt).forEach((key) => {
-        if (domains[key] === undefined) {
-            console.log(key);
-            domains[key] = crt[key]; count++;
-        }
-    });
+    const apis2 = {
+        'crt.sh': findCrt,
+        'AlienVault': findAlienVault,
+        'CertSpotter': findCertSpotter
+    }
 
-    console.log("============== [ CRT.sh ]: " + count);
-/*
-    const alienVault = await findAlienVault(url);
+    const apis = [
+        findCrt,
+        findAlienVault,
+        findCertSpotter
+    ];
 
-    count = 0;
-    Object.keys(alienVault).forEach((key) => {
-        if (domains[key] === undefined) {
-            console.log(key);
-            domains[key] = alienVault[key]; count++;
-        }
-    });
+    for await (const api of apis) {
+        let count = 0;
+        const response = await api.apply(null, [url]);
 
-    console.log("============== [ AlienVault ]: " + count);
+        Object.keys(response).forEach((key) => {
+            if (domains[key] === undefined) {
+                //interface.writeLog(url, { color: 'blue' });
+                domains[key] = response[key]; 
+            }
+            count++;
+        });
 
-    const certspotter = await findCertSpotter(url);
+        interface.writeLog('============== [  ]: ' + count, { color: 'green' });
+    };
 
-    count = 0;
-    Object.keys(certspotter).forEach((key) => {
-        if (domains[key] === undefined) {
-            console.log(key);
-            domains[key] = certspotter[key]; count++;
-        }
-    });
-
-    console.log("============== [ CertSpotter ]: " + count);
-    */
+    console.log('end');
 
     return Object.keys(domains);
 }
