@@ -33,12 +33,12 @@ const writeLog = (msg, options = {}) => {
     if (options.color === undefined)
         options.color = 'white';
 
-    process.stdout.write(colors[options.color] + msg + colors['reset'] + '\r\n');
+    process.stdout.write(colors[options.color] + msg + colors['reset']);
 }
 
 const waitLog = (msg) => {
     spinner.start();
-    spinner.color = 'yellow';
+    spinner.color = 'blue';
     spinner.text = msg + '\r\n';
 
     return spinner;
