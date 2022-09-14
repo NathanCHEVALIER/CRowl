@@ -14,6 +14,7 @@ const cleanUrl = (url) => {
 }
 
 const errorRateLimited = () => { interface.writeLog('You have been rate limited', { color: 'red' }); return false; };
+const errorResponseCode = (n) => { interface.writeLog('Error: Unexpected HTTP Response Code: ' + n, { color: 'red' }); return false; };
 
 const errorHandler = (err) => {
     if (err.code === 'ESOCKETTIMEDOUT')
@@ -67,19 +68,28 @@ const findCrt = async (url) => {
 const findAlienVault = async (url) => {
     let domains = {};
     
-    const {body, response} = await request
+    const response = await request
         .getRequest('https://otx.alienvault.com/api/v1/indicators/domain/' + url + '/passive_dns')
-        .catch((err) => {});
+        .catch((err) => { return errorHandler(err) });
 
-    let subdomains = JSON.parse(body)["passive_dns"].map((elt) => {
-        return cleanUrl(elt.hostname);
-    });
+    if (response && response.response.statusCode >= 400)
+        console.log(response.response.statusCode);
 
-    subdomains.forEach( (elt) => {
-        domains[elt] = {
-            issuer: ''
-        };
-    });
+    if (response && response.response.statusCode == 200) {
+        let subdomains = errorChecker(response.body)
+        if (!subdomains)
+            return domains;
+
+        subdomains = subdomains["passive_dns"].map((elt) => {
+            return cleanUrl(elt.hostname);
+        });
+
+        subdomains.forEach( (elt) => {
+            domains[elt] = {
+                issuer: ''
+            };
+        });
+    }
 
     return domains;
 }
@@ -109,37 +119,57 @@ const findCertSpotter = async (url) => {
     return domains;
 }
 
-const find = async (url) => {
-    let domains = {};
+const requestApi = async (api) => {    
+    const response = await request
+        .getRequest(api.path)
+        .catch((err) => { return errorHandler(err) });
 
-    const apis2 = {
-        'crt.sh': findCrt,
-        'AlienVault': findAlienVault,
-        'CertSpotter': findCertSpotter
+    if (response && response.response.statusCode >= 400)
+        errorResponseCode(response.response.statusCode);
+
+    if (response && response.response.statusCode == 200) {
+        let subdomains = errorChecker(response.body)
+        if (subdomains)
+            return api.fn.apply(null, [subdomains]);
     }
 
-    const apis = [
-        findCrt,
-        findAlienVault,
-        findCertSpotter
-    ];
+    return {};
+}
 
-    for await (const api of apis) {
+const find = async (url) => {    
+    let domains = {};
+
+    const apis = {
+        'crt.sh': {
+            path: 'https://crt.sh/?q=%.' + url + '&output=json',
+            fn: findCrt
+        },
+        'AlienVault': { fn: findAlienVault },
+        'CertSpotter': { fn: findCertSpotter }
+    }
+
+    const l = Object.keys(apis).map((elt) => { return apis[elt].fn });
+
+    for await (const api of l) {
+        const apiName = Object.keys(apis)
+            .map((key) => { return { name: key, fn: apis[key].fn }; })
+            .filter((elt) => { return elt.fn === api; })
+            .map((elt) => { return elt.name; })[0];
+
+        const spinner = interface.waitLog('Looking for subdomains in ' + apiName);
+
         let count = 0;
         const response = await api.apply(null, [url]);
 
         Object.keys(response).forEach((key) => {
-            if (domains[key] === undefined) {
-                //interface.writeLog(url, { color: 'blue' });
-                domains[key] = response[key]; 
-            }
+            if (domains[key] === undefined)
+                domains[key] = response[key];
             count++;
         });
 
-        interface.writeLog('============== [  ]: ' + count, { color: 'green' });
+        spinner.succeed(count + ' Subdomains found in ' + apiName);
+        //interface.writeLog('============== [  ]: ' + count, { color: 'green' });
     };
-
-    console.log('end');
 
     return Object.keys(domains);
 }
