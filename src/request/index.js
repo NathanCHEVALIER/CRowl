@@ -1,13 +1,11 @@
 const request = require('request')
 
-const getRequest = (url) => {
+const getRequest = (url, tout = 8000) => {
     return new Promise((resolve, reject) => {
-        const options = { timeout: 8000 };
-
         request({ 
             method: 'GET',
             url: url,
-            timeout: 8000
+            timeout: tout
         }, (error, response, body) => {
             if (error)
                 return reject(error);
