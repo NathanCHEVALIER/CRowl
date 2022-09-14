@@ -5,18 +5,25 @@ const cheerio = require('cheerio');
 urls = [];
 
 const fromSiteMap = (domain) => { return new Promise(async (resolve, reject) => {
+    let tmpUrls = [];
     const {body, response} = await request
         .getRequest("https://" + domain + "/sitemap.xml", 50000)
         .catch((err) => {});
+
+    if (body === undefined) {
+        resolve(tmpUrls);
+        return;
+    }
 
     // console.log(body);
     const $ = cheerio.load(body);
     let urlList = $('loc');
 
     urlList.each((i, elt) => {
-        urls.push($(elt).text())
+        tmpUrls.push($(elt).text());
     });
-    resolve(domain)
+    // console.log(tmpUrls);
+    resolve(tmpUrls);
 })};
 
 const getPages = (domains) => { return new Promise(async (resolve, reject) => {
@@ -25,7 +32,8 @@ const getPages = (domains) => { return new Promise(async (resolve, reject) => {
         const spinner = interface.waitLog('Looking for pages in ' + domain);
         promises.push(fromSiteMap(domain)
             .then((res) => {
-                spinner.succeed(res + ' is finished');
+                spinner.succeed(domain + ' is finished: ' + res.length);
+                urls = urls.concat(res)
             })
         );
     }
@@ -36,8 +44,8 @@ const getPages = (domains) => { return new Promise(async (resolve, reject) => {
     resolve(urls)
 })};
 
-getPages(["lcl.fr", "epita.fr", "labanquepostale.fr", "auchan.fr"])
-    .then((res) => console.log(res));
+// getPages(["lcl.fr", "epita.fr", "labanquepostale.fr", "auchan.fr"])
+//     .then((res) => console.log(res));
 
 module.exports = {
     getPages

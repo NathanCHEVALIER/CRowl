@@ -24,11 +24,20 @@ program
     .option('-d, --domain <domain>', 'domain name')
     .action(async (options) => {
         subdomains = await domEnum.find(options.domain);
+        let pages = await pageEnum.getPages(subdomains)
         
         if (filename !== undefined && filename !== "") {
-            let file = fs.createWriteStream(filename);
+            splitedFilename = filename.split(".");
+            splitedFilename[0] += "_domain";
+
+            let fileDomain = fs.createWriteStream(splitedFilename.join('.'));
             file.on('error', function(err) { /* error handling */ });
             subdomains.forEach((url) => { file.write(url + '\n'); });
+            file.end();
+
+            let filePages = fs.createWriteStream(filename);
+            file.on('error', function(err) { /* error handling */ });
+            pages.forEach((url) => { file.write(url + '\n'); });
             file.end();
         }
     });
