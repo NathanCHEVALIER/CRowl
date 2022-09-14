@@ -13,35 +13,37 @@ const cleanUrl = (url) => {
         .split('/')[0];
 }
 
-const errorRateLimited = () => { interface.writeLog('You have been rate limited', { color: 'red' }); return false; };
-const errorResponseCode = (n) => { interface.writeLog('Error: Unexpected HTTP Response Code: ' + n, { color: 'red' }); return false; };
-
 const errorHandler = (err) => {
     if (err.code === 'ESOCKETTIMEDOUT')
-        interface.writeLog('Timed OUT\r\n', { color: 'red' });
-    else
-        interface.writeLog(err, { color: 'red' });
-    return false;
+        return 'Timed Out Exceeded';
+    else if (err.response.statusCode >= 400) {
+        console.log('hgf');
+        console.log(err.response);
+        if (err.response.statusCode == 429)
+            return 'Rate Limit exceeded' + err.response.statusMessage;
+        
+        return str(err.response.statusCode);
+    }
 }
 
 const errorChecker = (body) => {
-    //console.log(body);
     try {
         const response = JSON.parse(body);
-        
+
+        if (!response)
+            return [false, 'Bad JSON format'];
         if (response.code !== undefined) {
             if (response.code = 'rate_limited')
-                return errorRateLimited();
+                return [false, 'Rate limit exceeded'];
         }
 
-        return response;
+        return [true, response];
     }
     catch (e) {
-        //console.log(e);
+        console.log(e);
     }
 
-    interface.writeLog('Error: Bad JSON Response format', { color: 'red' });
-    return false;
+    return [false, 'Unexpected Error'];
 }
 
 const findCrt = async (subdomains) => {
@@ -78,29 +80,31 @@ const findCertSpotter = async (subdomains) => {
 }
 
 const requestApi = async (api) => {    
+    const spinner = interface.waitLog('Looking for subdomains in ' + api.name);
+
     const response = await request
-        .getRequest(api.path)
-        .catch((err) => { 
-            const e = errorHandler(err);
-            console.log(e);
-            return e;
+        .getRequest(api.path, 30000)
+        .catch((err) => {
+            return errorHandler(err);
         });
 
-    if (api.name === 'crt.sh')
-        console.log(response);
-        
-    if (response === false)
-        console.log('timeout');
+    //console.log(response);
 
-    if (response && response.response.statusCode >= 400)
-        errorResponseCode(response.response.statusCode);
+    if (typeof(response) !== 'string') {
+        let [status, subdomains] = errorChecker(response.body);
+        if (status) {
+            const result = await api.fn.apply(null, [subdomains]);
 
-    if (response && response.response.statusCode == 200) {
-        let subdomains = errorChecker(response.body)
-        if (subdomains)
-            return await api.fn.apply(null, [subdomains]);
+            spinner.succeed(result.length + ' Subdomains found in ' + api.name);
+            return result;
+        }
+
+        spinner.fail(api.name + ' failed: ' + subdomains);
+        return [];
     }
 
+    //console.log(response);
+    spinner.fail(api.name + ' failed: ' + response);
     return [];
 }
 
@@ -109,14 +113,17 @@ const find = async (url) => {
 
     const apis = {
         'crt.sh': {
+            name: 'crt.sh',
             path: 'https://crt.sh/?q=%.' + url + '&output=json',
             fn: findCrt
         },
-        'AlienVault': { 
+        'AlienVault': {
+            name: 'AlienVault',
             path: 'https://otx.alienvault.com/api/v1/indicators/domain/' + url + '/passive_dns',
             fn: findAlienVault 
         },
-        'CertSpotter': { 
+        'CertSpotter': {
+            name: 'CertSpotter',
             path: 'https://api.certspotter.com/v1/issuances?domain=' + url + '&include_subdomains=true&expand=dns_names&expand=issuer&expand=cert',
             fn: findCertSpotter 
         }
@@ -130,22 +137,12 @@ const find = async (url) => {
             .filter((elt) => { return elt.fn === api; })
             .map((elt) => { return elt.name; })[0];
 
-        const spinner = interface.waitLog('Looking for subdomains in ' + apiName);
-
         const response = await requestApi(apis[apiName]);
 
-        let count = 0;
         response.forEach((elt) => {
             if (domains[elt.name] === undefined)
-                domains[elt.name] = elt; count++;
+                domains[elt.name] = elt;
         });
-
-        //console.log(response);
-
-        if (response.length >= 0)
-            spinner.succeed(response.length + ' Subdomains found in ' + apiName + ' dont ' + count + ' new unique');
-        else
-            spinner.fail(apiName + ' failed');
     };
 
     return Object.keys(domains);
