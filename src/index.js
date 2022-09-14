@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const domEnum = require('./domEnum')
+const pageEnum = require('./pageEnum')
 const program = require('commander')
 const interface = require('./interface');
 const fs = require('fs');
