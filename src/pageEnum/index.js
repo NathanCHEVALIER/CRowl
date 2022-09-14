@@ -19,12 +19,13 @@ const fromSiteMap = (domain) => { return new Promise(async (resolve, reject) => 
     resolve(domain)
 })};
 
-const getPages = async (domains) => {
+const getPages = (domains) => { return new Promise(async (resolve, reject) => {
     promises = []
     for (const domain of domains) {
+        const spinner = interface.waitLog('Looking for pages in ' + domain);
         promises.push(fromSiteMap(domain)
             .then((res) => {
-                console.log(res)
+                spinner.succeed(res + ' is finished');
             })
         );
     }
@@ -32,12 +33,12 @@ const getPages = async (domains) => {
     for (const promise of promises) {
         await promise;
     }
+    resolve(urls)
+})};
 
-    // console.log(urls);
-};
-
-getPages(["lcl.fr"]);
+getPages(["lcl.fr", "epita.fr", "labanquepostale.fr", "auchan.fr"])
+    .then((res) => console.log(res));
 
 module.exports = {
-    fromSiteMap
+    getPages
 }
