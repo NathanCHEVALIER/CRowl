@@ -23,6 +23,8 @@ program
     .option('-d, --domain <domain>', 'domain name')
     .action(async (options) => {
         subdomains = await domEnum.find(options.domain);
+        subdomains = await domEnum.check(subdomains);
+        subdomains = subdomains.map((elt) => { return elt.name; });
         
         if (filename !== undefined && filename !== "") {
             let file = fs.createWriteStream(filename);
