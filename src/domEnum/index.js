@@ -61,6 +61,9 @@ const findCrt = async (subdomains) => {
 }
 
 const findAlienVault = async (subdomains) => {
+    if (subdomains["passive_dns"] === undefined)
+        return [];
+
     return subdomains["passive_dns"].map((elt) => {
         return {
             name: cleanUrl(elt.hostname),
@@ -82,7 +85,7 @@ const requestApi = async (api) => {
     const spinner = interface.waitLog('Looking for subdomains in ' + api.name);
 
     const response = await request
-        .getRequest(api.path, 10000)
+        .getRequest(api.path, 50000)
         .catch((err) => {
             return errorHandler(err);
         });
@@ -149,6 +152,7 @@ const find = async (url) => {
     };
 
     //bruteforce.bruteforce(url);
+    interface.writeLog(domains.length + ' unique subdomains.\r\n', { color: 'green' });
 
     return Object.values(domains);
 }

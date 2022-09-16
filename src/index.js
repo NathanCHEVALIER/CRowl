@@ -27,6 +27,7 @@ program
         subdomains = subdomains.map((elt) => { return elt.name; });
         
         if (filename !== undefined && filename !== "") {
+            console.log('Result written in ' + filename);
             let file = fs.createWriteStream(filename);
             file.on('error', function(err) { /* error handling */ });
             subdomains.forEach((url) => { file.write(url + '\n'); });
